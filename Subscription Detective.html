@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Subscription Detective</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+<style>
+:root{--bg:#E9EDF3;--surface:#fff;--ink:#12203A;--mute:#5B6B84;--line:#D3DAE5;--hot:#C93A20;--hotbg:#FBE3DD;--ok:#0B7F70;--okbg:#DDF3EF;--hero:#12203A;--heroink:#F4F6FA;--heromute:#9FB0CC;--amber:#8A5A00;--amberbg:#FFF0CC;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0B1120;--surface:#141D33;--ink:#E8ECF4;--mute:#93A1BA;--line:#25314D;--hot:#FF8466;--hotbg:#3B1F1C;--ok:#41D0BC;--okbg:#10332F;--hero:#1D2B4F;--heroink:#F4F6FA;--heromute:#A9B8D4;--amber:#FFC95C;--amberbg:#3A2D0C;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0B1120;--surface:#141D33;--ink:#E8ECF4;--mute:#93A1BA;--line:#25314D;--hot:#FF8466;--hotbg:#3B1F1C;--ok:#41D0BC;--okbg:#10332F;--hero:#1D2B4F;--heroink:#F4F6FA;--heromute:#A9B8D4;--amber:#FFC95C;--amberbg:#3A2D0C;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{background:var(--bg);color:var(--ink);font-family:'Bricolage Grotesque',system-ui,-apple-system,'Segoe UI',sans-serif;margin:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.mute{color:var(--mute)}.hot{color:var(--hot)}.ok{color:var(--ok)}
+.addbtn{background:var(--ink);color:var(--bg);border:0;border-radius:999px;padding:9px 18px;font:inherit;font-weight:700;cursor:pointer;white-space:nowrap}
+.addbtn:hover{opacity:.88}
+.inp{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:15px}
+.inp[aria-invalid=true]{border-color:var(--hot)}
+.err{color:var(--hot);font-size:12.5px;margin-top:4px;font-weight:400}
+.chip{border:1px solid var(--line);border-radius:999px;padding:5px 13px;font-size:13px;background:var(--surface);color:var(--mute);cursor:pointer}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.badge{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:6px;white-space:nowrap}
+.sw{width:44px;height:26px;border-radius:999px;background:var(--line);position:relative;border:0;cursor:pointer;transition:background .2s;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.sw[aria-checked=true]{background:var(--hot)}.sw[aria-checked=true]::after{transform:translateX(18px)}
+button:focus-visible,select:focus-visible{outline:2px solid var(--ok);outline-offset:2px}
+.day{aspect-ratio:1/0.92;border-radius:10px;border:1px solid transparent;background:transparent;color:var(--ink);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:5px;font-size:13px;font-family:inherit}
+.day:hover{border-color:var(--line)}
+.day[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.day.today{border-color:var(--ok)}
+.dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin:0 1px}
+.bar{height:8px;border-radius:99px;background:rgba(255,255,255,.18);overflow:hidden}
+.bar>i{display:block;height:100%;background:#FF8466;transition:width .45s}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const {useState,useEffect,useRef,useMemo}=React;
+const html=htm.bind(React.createElement);
+const TODAY=new Date(2026,10,1);
+const MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MS=['Jun','Jul','Aug','Sep','Oct','Nov'];
+const gbp=n=>'£'+n.toFixed(2);
+const gbp0=n=>'£'+Math.round(n).toLocaleString('en-GB');
+const dim=(y,m)=>new Date(y,m+1,0).getDate();
+
+const SEED=[
+ {id:1,name:'Netflix',cat:'Streaming',amt:15.49,f:'m',day:8,hist:[10.99,10.99,12.99,12.99,12.99,15.49],c:'#E50914',wasted:false},
+ {id:2,name:'Spotify',cat:'Music',amt:11.99,f:'m',day:14,hist:[10.99,10.99,10.99,10.99,10.99,11.99],c:'#1DB954',wasted:false},
+ {id:3,name:'PureGym',cat:'Fitness',amt:24.99,f:'m',day:3,hist:[22.99,22.99,22.99,24.99,24.99,24.99],c:'#F5A100',wasted:true},
+ {id:4,name:'Disney+',cat:'Streaming',amt:7.99,f:'m',day:26,hist:[7.99,7.99,7.99,7.99,7.99,7.99],c:'#1B3FA0',wasted:true},
+ {id:5,name:'Adobe Creative Cloud',cat:'Software',amt:19.97,f:'m',day:12,hist:[17.58,17.58,17.58,17.58,17.58,19.97],c:'#D7261E',wasted:false},
+ {id:6,name:'Amazon Prime',cat:'Shopping',amt:8.99,f:'m',day:5,hist:[8.99,8.99,8.99,8.99,8.99,8.99],c:'#00A8E1',wasted:false},
+ {id:7,name:'iCloud+',cat:'Storage',amt:2.99,f:'m',day:21,hist:[2.99,2.99,2.99,2.99,2.99,2.99],c:'#4A90E2',wasted:false},
+ {id:8,name:'Headspace',cat:'Wellness',amt:9.99,f:'m',day:17,hist:[9.99,9.99,9.99,9.99,9.99,9.99],c:'#F47D31',wasted:true},
+ {id:9,name:'Audible',cat:'Books',amt:7.99,f:'m',day:19,hist:[7.99,7.99,7.99,7.99,7.99,7.99],c:'#E8870E',wasted:false},
+ {id:10,name:'Strava',cat:'Fitness',amt:5.99,f:'m',day:23,hist:[5.99,5.99,5.99,5.99,5.99,5.99],c:'#FC4C02',wasted:false},
+ {id:11,name:'Dropbox Plus',cat:'Storage',amt:119.88,f:'y',day:9,mon:11,hist:[119.88,119.88,119.88,119.88,119.88,119.88],c:'#0061FF',wasted:true},
+ {id:12,name:'Notion AI',cat:'Software',amt:8.00,f:'m',day:4,trial:{y:2026,m:10,d:4},hist:[0,0,0,0,0,0],c:'#2B2B2B',wasted:false},
+ {id:13,name:'Paramount+',cat:'Streaming',amt:6.99,f:'m',day:7,trial:{y:2026,m:10,d:7},hist:[0,0,0,0,0,0],c:'#0064FF',wasted:false},
+];
+const mEq=s=>s.f==='y'?s.amt/12:s.f==='w'?s.amt*52/12:s.amt;
+const FL={m:'monthly',y:'yearly',w:'weekly'},FP={m:'a month',y:'a year',w:'a week'},FD={m:'per month',y:'per year',w:'per week'};
+const PAL=['#7C3AED','#0EA5A4','#DB2777','#2563EB','#D97706','#059669','#9333EA','#E11D48'];
+const CATS=['Streaming','Music','Fitness','Software','Storage','Shopping','Wellness','Books','News','Gaming','Other'];
+const inc=s=>{const h=s.hist;return h[5]-h[4]>0.001&&h[4]>0?h[5]-h[4]:0};
+function nextCharge(s){
+  if(s.start){let d=new Date(s.start.y,s.start.m,s.start.d),n=0;
+    while(d<TODAY&&n++<800){const Y=d.getFullYear(),M=d.getMonth();d=s.f==='w'?new Date(Y,M,d.getDate()+7):s.f==='y'?new Date(Y+1,M,Math.min(s.day,dim(Y+1,M))):new Date(Y,M+1,Math.min(s.day,dim(Y,M+1)))}
+    return d}
+  if(s.trial)return new Date(s.trial.y,s.trial.m,s.trial.d);
+  if(s.f==='y'){let d=new Date(2026,s.mon,s.day);if(d<TODAY)d=new Date(2027,s.mon,s.day);return d}
+  let d=new Date(2026,10,Math.min(s.day,30));if(d<TODAY)d=new Date(2026,11,s.day);return d;
+}
+const daysUntil=d=>Math.round((d-TODAY)/864e5);
+function chargesFor(subs,y,m){
+  const out=[];
+  subs.forEach(s=>{
+    if(s.start){const st=new Date(s.start.y,s.start.m,s.start.d);
+      if(s.f==='w'){for(let d=1;d<=dim(y,m);d++){const df=Math.round((new Date(y,m,d)-st)/864e5);if(df>=0&&df%7===0)out.push({s,day:d,kind:'renewal'})}}
+      else if(s.f==='m'||s.mon===m){const d=Math.min(s.day,dim(y,m));if(new Date(y,m,d)>=st)out.push({s,day:d,kind:'renewal'})}
+      return}
+    if(s.trial){const t=s.trial,k=(y-t.y)*12+(m-t.m);if(k===0)out.push({s,day:t.d,kind:'trial'});else if(k>0)out.push({s,day:Math.min(t.d,dim(y,m)),kind:'renewal'});return}
+    if(s.f==='y'){if(s.mon===m)out.push({s,day:s.day,kind:'renewal'});return}
+    out.push({s,day:Math.min(s.day,dim(y,m)),kind:'renewal'});
+  });
+  return out;
+}
+function useCount(v){
+  const [d,setD]=useState(v);const r=useRef(v);
+  useEffect(()=>{const from=r.current,t0=performance.now();let id;
+    const f=t=>{const p=Math.min(1,(t-t0)/450);const x=from+(v-from)*(1-Math.pow(1-p,3));r.current=x;setD(x);if(p<1)id=requestAnimationFrame(f)};
+    id=requestAnimationFrame(f);return()=>cancelAnimationFrame(id)},[v]);
+  return d;
+}
+function Logo({s,size=40}){
+  return html`<div aria-hidden="true" style=${{width:size,height:size,background:s.c,borderRadius:10,color:'#fff',fontWeight:800,fontSize:size*.45,display:'grid',placeItems:'center',flex:'none'}}>${s.name[0]}</div>`;
+}
+function Switch({on,onChange,label}){
+  return html`<button role="switch" aria-checked=${on} aria-label=${label} class="sw" onClick=${e=>{e.stopPropagation();onChange()}}></button>`;
+}
+function Spark({h}){
+  const w=260,ht=70,min=Math.min(...h)*.9,max=Math.max(...h)*1.05||1;
+  const pts=h.map((v,i)=>[10+i*(w-20)/5,ht-10-((v-min)/((max-min)||1))*(ht-20)]);
+  return html`<svg viewBox=${`0 0 ${w} ${ht+16}`} class="w-full" role="img" aria-label="Price history, last 6 months">
+    <polyline fill="none" stroke="var(--ink)" stroke-width="2" points=${pts.map(p=>p.join(',')).join(' ')}/>
+    ${pts.map((p,i)=>html`<g key=${i}><circle cx=${p[0]} cy=${p[1]} r=${i===5?4.5:3} fill=${i===5&&h[5]>h[4]?'var(--hot)':'var(--ink)'}/><text x=${p[0]} y=${ht+12} text-anchor="middle" font-size="10" fill="var(--mute)">${MS[i]}</text></g>`)}
+  </svg>`;
+}
+
+function App(){
+  const [subs,setSubs]=useState(SEED.map(s=>({...s,status:'active'})));
+  const [filter,setFilter]=useState('all');
+  const [sort,setSort]=useState('cost');
+  const [cal,setCal]=useState({y:2026,m:10});
+  const [sel,setSel]=useState({y:2026,m:10,d:1});
+  const [open,setOpen]=useState(null);
+  const [toast,setToast]=useState('');
+  const [period,setPeriod]=useState('m');
+  const [adding,setAdding]=useState(false);
+  const [form,setForm]=useState({name:'',amt:'',f:'m',date:'',cat:''});
+  const [errs,setErrs]=useState({});
+  const [fresh,setFresh]=useState(null);
+  useEffect(()=>{const k=e=>{if(e.key==='Escape'){setAdding(false);setOpen(null)}};window.addEventListener('keydown',k);return()=>window.removeEventListener('keydown',k)},[]);
+
+  const say=t=>{setToast(t);clearTimeout(say.t);say.t=setTimeout(()=>setToast(''),2600)};
+  const upd=(id,p)=>setSubs(a=>a.map(s=>s.id===id?{...s,...p}:s));
+  const openAdd=()=>{setForm({name:'',amt:'',f:'m',date:'',cat:''});setErrs({});setAdding(true)};
+  const validate=f=>{const e={},n=f.name.trim(),a=f.amt.trim().replace(/^£/,'');
+    if(!n)e.name='Enter a name, like “Netflix”.';else if(n.length>40)e.name='Keep the name under 40 characters.';
+    if(!a)e.amt='Enter what you pay each time.';
+    else if(!/^\d+(\.\d{1,2})?$/.test(a))e.amt='Use a number like 9.99, with no letters, symbols or minus sign.';
+    else if(parseFloat(a)<=0)e.amt='The cost must be more than £0.';
+    else if(parseFloat(a)>10000)e.amt='That looks too high. Enter £10,000 or less.';
+    if(!f.date)e.date='Pick the date of your next payment.';
+    else{const [y,m,d]=f.date.split('-').map(Number),dt=new Date(y,m-1,d);
+      if(isNaN(dt)||dt.getMonth()!==m-1)e.date='That date isn’t valid.';
+      else if(dt<TODAY)e.date='Pick today or a future date.';
+      else if(y>2035)e.date='Pick a date before 2036.'}
+    if(!f.cat)e.cat='Choose a category.';
+    return e};
+  const save=()=>{const e=validate(form);setErrs(e);if(Object.keys(e).length)return;
+    const [y,mm,d]=form.date.split('-').map(Number),m=mm-1,name=form.name.trim(),amt=Math.round(parseFloat(form.amt.trim().replace(/^£/,''))*100)/100;
+    const ns={id:Date.now(),name,cat:form.cat,amt,f:form.f,day:d,mon:m,start:{y,m,d},hist:Array(6).fill(amt),c:PAL[(name.charCodeAt(0)+name.length)%PAL.length],wasted:false,status:'active'};
+    setSubs(a=>[...a,ns]);setFilter('all');setCal({y,m});setSel({y,m,d});setFresh(ns.id);setAdding(false);
+    say(`Added ${name}. It’s now in your totals and calendar.`);
+    setTimeout(()=>{const el=document.getElementById('sub-'+ns.id);if(el)el.scrollIntoView({behavior:'smooth',block:'center'})},80);
+    setTimeout(()=>setFresh(null),4000)};
+  const field=(k,v)=>{setForm(f=>({...f,[k]:v}));if(errs[k])setErrs(x=>({...x,[k]:undefined}))};
+  const pv=parseFloat(form.amt.trim().replace(/^£/,'')),pvOk=isFinite(pv)&&pv>0&&/^\d+(\.\d{1,2})?$/.test(form.amt.trim().replace(/^£/,''));
+  const active=subs.filter(s=>s.status==='active');
+  const totalM=active.reduce((a,s)=>a+mEq(s),0);
+  const wastedM=active.filter(s=>s.wasted).reduce((a,s)=>a+mEq(s),0);
+  const wastedN=active.filter(s=>s.wasted).length;
+  const mult=period==='m'?1:12;
+  const shownW=useCount(wastedM*mult), shownT=useCount(totalM*mult);
+  const pct=totalM?Math.round(wastedM/totalM*100):0;
+
+  const alerts=active.map(s=>({s,d:daysUntil(nextCharge(s))})).filter(x=>x.d<=3&&(x.s.trial||inc(x.s)>0||x.d<=1)).sort((a,b)=>a.d-b.d);
+  const list=useMemo(()=>{
+    let l=subs.filter(s=>s.status==='active');
+    if(filter==='wasted')l=l.filter(s=>s.wasted);
+    if(filter==='trial')l=l.filter(s=>s.trial);
+    if(filter==='inc')l=l.filter(s=>inc(s)>0);
+    return [...l].sort((a,b)=>sort==='cost'?mEq(b)-mEq(a):sort==='date'?nextCharge(a)-nextCharge(b):a.name.localeCompare(b.name));
+  },[subs,filter,sort]);
+  const dismissed=subs.filter(s=>s.status==='dismissed');
+
+  const charges=chargesFor(active,cal.y,cal.m);
+  const byDay={};charges.forEach(c=>{(byDay[c.day]=byDay[c.day]||[]).push(c)});
+  const first=(new Date(cal.y,cal.m,1).getDay()+6)%7;
+  const cells=[...Array(first).fill(null),...Array.from({length:dim(cal.y,cal.m)},(_,i)=>i+1)];
+  const selCharges=(sel.y===cal.y&&sel.m===cal.m?byDay[sel.d]:null)||[];
+  const monthTotal=charges.reduce((a,c)=>a+c.s.amt,0);
+  const go=n=>{const d=new Date(cal.y,cal.m+n,1);setCal({y:d.getFullYear(),m:d.getMonth()})};
+  const ds=open&&subs.find(s=>s.id===open);
+
+  return html`<div class="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+    <header class="flex items-end justify-between gap-4 flex-wrap mb-5">
+      <div>
+        <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Subscription Detective</h1>
+        <p class="mute mt-1">We found ${active.length} subscriptions costing ${gbp(totalM)} a month, or ${gbp(totalM*12)} a year.</p>
+      </div>
+      <div class="flex gap-2 items-center flex-wrap">
+      <button class="addbtn" onClick=${openAdd}>+ Add subscription</button>
+      <div class="flex gap-2" role="group" aria-label="Show totals per">
+        <button class="chip" aria-pressed=${period==='m'} onClick=${()=>setPeriod('m')}>Per month</button>
+        <button class="chip" aria-pressed=${period==='y'} onClick=${()=>setPeriod('y')}>Per year</button>
+      </div></div>
+    </header>
+
+    <section aria-live="polite" class="rounded-2xl p-6 sm:p-8 mb-5" style=${{background:'var(--hero)',color:'var(--heroink)'}}>
+      <div class="flex flex-wrap items-end justify-between gap-6">
+        <div>
+          <div style=${{color:'var(--heromute)'}} class="text-sm">Money wasted ${period==='m'?'every month':'every year'}</div>
+          <div class="font-extrabold leading-none mt-2" style=${{fontSize:'clamp(48px,9vw,88px)',letterSpacing:'-0.03em',fontVariantNumeric:'tabular-nums'}}>${gbp(shownW)}</div>
+          <div style=${{color:'var(--heromute)'}} class="mt-3 text-sm">${wastedN===0?'Toggle “Wasted” on anything you don’t use.':`From ${wastedN} subscription${wastedN>1?'s':''} you marked as unused.`}</div>
+        </div>
+        <div class="w-full sm:w-80">
+          <div class="flex justify-between text-sm mb-2"><span style=${{color:'var(--heromute)'}}>Share of your subscription spend</span><b>${pct}%</b></div>
+          <div class="bar"><i style=${{width:pct+'%'}}></i></div>
+          <div class="flex justify-between text-sm mt-3" style=${{color:'var(--heromute)'}}><span>Total spend</span><span style=${{fontVariantNumeric:'tabular-nums'}}>${gbp(shownT)}</span></div>
+          <div class="flex justify-between text-sm mt-1" style=${{color:'var(--heromute)'}}><span>Still earning their keep</span><span style=${{fontVariantNumeric:'tabular-nums'}}>${gbp(shownT-shownW)}</span></div>
+        </div>
+      </div>
+    </section>
+
+    ${alerts.length>0&&html`<section class="card p-4 mb-5" aria-label="Upcoming alerts">
+      <h2 class="font-semibold mb-2">Coming up</h2>
+      <div class="flex flex-col gap-2">${alerts.map(({s,d})=>html`
+        <button key=${s.id} onClick=${()=>setOpen(s.id)} class="flex items-center gap-3 text-left rounded-lg p-2 hover:opacity-80" style=${{background:s.trial?'var(--amberbg)':inc(s)>0?'var(--hotbg)':'var(--bg)',border:0,color:'var(--ink)',cursor:'pointer',fontFamily:'inherit'}}>
+          <${Logo} s=${s} size=${28}/>
+          <span class="flex-1 text-sm"><b>${s.name}</b> ${s.trial?`trial converts to ${gbp(s.amt)}/mo`:inc(s)>0?`price rose ${gbp(inc(s))} to ${gbp(s.amt)}`:`renews for ${gbp(s.amt)}`} · ${d===0?'today':d===1?'tomorrow':`in ${d} days`}</span>
+          <span class="text-sm mute">View</span>
+        </button>`)}</div>
+    </section>`}
+
+    <div class="grid lg:grid-cols-5 gap-5 items-start">
+      <section class="lg:col-span-3" aria-label="Subscriptions">
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          ${[['all','All'],['wasted','Wasted'],['trial','Trials'],['inc','Price rises']].map(([k,l])=>html`<button key=${k} class="chip" aria-pressed=${filter===k} onClick=${()=>setFilter(k)}>${l}</button>`)}
+          <label class="ml-auto text-sm mute flex items-center gap-2">Sort
+            <select value=${sort} onChange=${e=>setSort(e.target.value)} class="chip" style=${{padding:'5px 8px'}}>
+              <option value="cost">Cost</option><option value="date">Next charge</option><option value="name">Name</option>
+            </select></label>
+        </div>
+        <ul class="flex flex-col gap-2 list-none p-0 m-0">
+          ${list.length===0&&html`<li class="card p-6 mute text-center">Nothing matches this filter yet.</li>`}
+          ${list.map(s=>{const nd=nextCharge(s),du=daysUntil(nd);return html`
+          <li key=${s.id} id=${'sub-'+s.id} class="card p-3 sm:p-4 flex items-center gap-3 cursor-pointer" style=${s.wasted?{borderColor:'var(--hot)'}:s.id===fresh?{borderColor:'var(--ok)',boxShadow:'0 0 0 2px var(--ok)'}:{}} onClick=${()=>setOpen(s.id)}>
+            <${Logo} s=${s}/>
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold truncate">${s.name}</div>
+              <div class="text-sm mute">${s.cat} · ${FL[s.f]} · next ${nd.getDate()} ${MN[nd.getMonth()].slice(0,3)}</div>
+              <div class="flex gap-1.5 mt-1 flex-wrap">
+                ${s.trial&&html`<span class="badge" style=${{background:'var(--amberbg)',color:'var(--amber)'}}>Trial ends in ${du}d</span>`}
+                ${inc(s)>0&&html`<span class="badge" style=${{background:'var(--hotbg)',color:'var(--hot)'}}>↑ ${gbp(inc(s))} rise</span>`}
+                ${s.wasted&&html`<span class="badge" style=${{background:'var(--hotbg)',color:'var(--hot)'}}>Wasted</span>`}
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="font-bold" style=${{fontVariantNumeric:'tabular-nums'}}>${gbp(s.amt)}</div>
+              <div class="text-xs mute">${FP[s.f]}</div>
+            </div>
+            <div class="flex flex-col items-center gap-1 pl-1">
+              <${Switch} on=${s.wasted} label=${`Mark ${s.name} as wasted money`} onChange=${()=>{upd(s.id,{wasted:!s.wasted});say(s.wasted?`${s.name} is back in your “keep” pile`:`${s.name} marked as wasted`)}}/>
+              <span class="text-xs mute">Wasted</span>
+            </div>
+          </li>`})}
+        </ul>
+        ${dismissed.length>0&&html`<div class="mt-4 text-sm mute">Dismissed: ${dismissed.map(s=>html`<button key=${s.id} class="chip ml-2" onClick=${()=>upd(s.id,{status:'active'})}>Restore ${s.name}</button>`)}</div>`}
+      </section>
+
+      <section class="lg:col-span-2 card p-4 lg:sticky lg:top-4" aria-label="Charge calendar">
+        <div class="flex items-center justify-between mb-1">
+          <button class="chip" aria-label="Previous month" onClick=${()=>go(-1)}>‹</button>
+          <h2 class="font-semibold">${MN[cal.m]} ${cal.y}</h2>
+          <button class="chip" aria-label="Next month" onClick=${()=>go(1)}>›</button>
+        </div>
+        <p class="text-center text-sm mute mb-3">${gbp(monthTotal)} leaves your account this month</p>
+        <div class="grid grid-cols-7 text-center text-xs mute mb-1">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>html`<div key=${d}>${d}</div>`)}</div>
+        <div class="grid grid-cols-7 gap-1">
+          ${cells.map((d,i)=>{
+            if(!d)return html`<div key=${'e'+i}></div>`;
+            const cs=byDay[d]||[];
+            const isSel=sel.y===cal.y&&sel.m===cal.m&&sel.d===d;
+            const isToday=cal.y===2026&&cal.m===10&&d===1;
+            return html`<button key=${d} class=${'day'+(isToday?' today':'')} aria-pressed=${isSel} aria-label=${`${d} ${MN[cal.m]}, ${cs.length} charge${cs.length===1?'':'s'}`} onClick=${()=>setSel({y:cal.y,m:cal.m,d})}>
+              <span>${d}</span>
+              <span class="mt-1 flex flex-wrap justify-center" style=${{maxWidth:30}}>${cs.slice(0,3).map(c=>html`<i key=${c.s.id} class="dot" style=${{background:c.s.wasted?'var(--hot)':c.kind==='trial'?'#E8A200':'var(--ok)'}}></i>`)}</span>
+            </button>`})}
+        </div>
+        <div class="flex gap-4 text-xs mute mt-3 flex-wrap">
+          <span><i class="dot" style=${{background:'var(--ok)'}}></i> Renewal</span>
+          <span><i class="dot" style=${{background:'#E8A200'}}></i> Trial converts</span>
+          <span><i class="dot" style=${{background:'var(--hot)'}}></i> Wasted</span>
+        </div>
+        <div class="mt-4 pt-4" style=${{borderTop:'1px solid var(--line)'}}>
+          <h3 class="font-semibold mb-2">${sel.d} ${MN[sel.m]}</h3>
+          ${selCharges.length===0?html`<p class="text-sm mute">No charges this day.</p>`:html`<ul class="list-none p-0 m-0 flex flex-col gap-2">${selCharges.map(c=>html`
+            <li key=${c.s.id}><button onClick=${()=>setOpen(c.s.id)} class="w-full flex items-center gap-3 text-left rounded-lg p-2" style=${{background:'var(--bg)',border:0,cursor:'pointer',color:'var(--ink)',fontFamily:'inherit'}}>
+              <${Logo} s=${c.s} size=${30}/>
+              <span class="flex-1 text-sm"><b>${c.s.name}</b><br/><span class="mute">${c.kind==='trial'?'Free trial converts':'Renewal'}${c.s.wasted?' · marked wasted':''}</span></span>
+              <b style=${{fontVariantNumeric:'tabular-nums'}}>${gbp(c.s.amt)}</b>
+            </button></li>`)}</ul>`}
+        </div>
+      </section>
+    </div>
+
+    ${adding&&html`<div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label="Add a subscription">
+      <div class="absolute inset-0" style=${{background:'rgba(8,14,28,.55)'}} onClick=${()=>setAdding(false)}></div>
+      <div class="relative w-full sm:max-w-md card p-5 overflow-y-auto" style=${{maxHeight:'92%',borderRadius:18}} onKeyDown=${e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();save()}}}>
+        <div class="flex items-center justify-between mb-4"><h2 class="text-xl font-extrabold">Add a subscription</h2><button class="chip" onClick=${()=>setAdding(false)} aria-label="Close form">Close</button></div>
+        <div class="flex flex-col gap-4">
+          <label class="block text-sm font-semibold">Name
+            <input class="inp mt-1" style=${{fontWeight:400}} autoFocus=${true} placeholder="e.g. Netflix" maxLength="40" value=${form.name} aria-invalid=${!!errs.name} onChange=${e=>field('name',e.target.value)}/>
+            ${errs.name&&html`<div class="err" role="alert">${errs.name}</div>`}</label>
+          <div><div class="text-sm font-semibold mb-1">Billing frequency</div>
+            <div class="flex gap-2" role="group" aria-label="Billing frequency">${[['m','Monthly'],['w','Weekly'],['y','Yearly']].map(([k,l])=>html`<button key=${k} class="chip" aria-pressed=${form.f===k} onClick=${()=>field('f',k)}>${l}</button>`)}</div></div>
+          <label class="block text-sm font-semibold">Cost ${FD[form.f]} (£)
+            <input class="inp mt-1" style=${{fontWeight:400}} inputMode="decimal" placeholder="e.g. 9.99" value=${form.amt} aria-invalid=${!!errs.amt} onChange=${e=>field('amt',e.target.value)}/>
+            ${errs.amt?html`<div class="err" role="alert">${errs.amt}</div>`:pvOk&&html`<div class="text-xs mute mt-1" style=${{fontWeight:400}}>That’s about ${gbp(mEq({f:form.f,amt:pv}))} a month, or ${gbp(mEq({f:form.f,amt:pv})*12)} a year.</div>`}</label>
+          <label class="block text-sm font-semibold">Next payment date
+            <input type="date" class="inp mt-1" style=${{fontWeight:400}} min="2026-11-01" value=${form.date} aria-invalid=${!!errs.date} onChange=${e=>field('date',e.target.value)}/>
+            ${errs.date&&html`<div class="err" role="alert">${errs.date}</div>`}</label>
+          <label class="block text-sm font-semibold">Category
+            <select class="inp mt-1" style=${{fontWeight:400}} value=${form.cat} aria-invalid=${!!errs.cat} onChange=${e=>field('cat',e.target.value)}>
+              <option value="">Choose a category</option>${CATS.map(c=>html`<option key=${c} value=${c}>${c}</option>`)}
+            </select>
+            ${errs.cat&&html`<div class="err" role="alert">${errs.cat}</div>`}</label>
+          ${Object.values(errs).some(Boolean)&&html`<div class="err" role="alert">Fix the highlighted fields to save.</div>`}
+          <div class="flex gap-2 justify-end pt-1">
+            <button class="chip" style=${{padding:'9px 16px'}} onClick=${()=>setAdding(false)}>Cancel</button>
+            <button class="addbtn" onClick=${save}>Save subscription</button>
+          </div>
+        </div>
+      </div>
+    </div>`}
+    ${ds&&html`<div class="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label=${ds.name+' details'}>
+      <div class="absolute inset-0" style=${{background:'rgba(8,14,28,.55)'}} onClick=${()=>setOpen(null)}></div>
+      <aside class="relative w-full sm:w-96 overflow-y-auto p-5" style=${{background:'var(--surface)',borderLeft:'1px solid var(--line)'}}>
+        <div class="flex items-center gap-3 mb-4">
+          <${Logo} s=${ds} size=${48}/>
+          <div class="flex-1"><h2 class="text-xl font-extrabold">${ds.name}</h2><div class="mute text-sm">${ds.cat}</div></div>
+          <button class="chip" onClick=${()=>setOpen(null)} aria-label="Close details">Close</button>
+        </div>
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div class="card p-3"><div class="text-xs mute">Costs</div><div class="font-bold text-lg">${gbp(ds.amt)}</div><div class="text-xs mute">${FD[ds.f]}</div></div>
+          <div class="card p-3"><div class="text-xs mute">Next charge</div><div class="font-bold text-lg">${nextCharge(ds).getDate()} ${MN[nextCharge(ds).getMonth()].slice(0,3)}</div><div class="text-xs mute">in ${daysUntil(nextCharge(ds))} days</div></div>
+        </div>
+        ${ds.trial&&html`<p class="text-sm rounded-lg p-3 mb-4" style=${{background:'var(--amberbg)',color:'var(--amber)'}}>Free trial. You’ll be charged ${gbp(ds.amt)} a month unless you cancel before it ends.</p>`}
+        ${inc(ds)>0&&html`<p class="text-sm rounded-lg p-3 mb-4" style=${{background:'var(--hotbg)',color:'var(--hot)'}}>Price went up ${gbp(inc(ds))} last month. That adds ${gbp(inc(ds)*12)} a year.</p>`}
+        <h3 class="font-semibold mb-1">Price history</h3>
+        <${Spark} h=${ds.hist}/>
+        <div class="flex items-center justify-between card p-3 my-4">
+          <div><div class="font-semibold">Wasted money</div><div class="text-sm mute">${ds.wasted?`Costing you ${gbp(mEq(ds)*12)} a year`:'I don’t use this'}</div></div>
+          <${Switch} on=${ds.wasted} label="Mark as wasted money" onChange=${()=>upd(ds.id,{wasted:!ds.wasted})}/>
+        </div>
+        <div class="flex flex-col gap-2">
+          <button class="chip" style=${{padding:'10px',borderRadius:10,color:'var(--ink)'}} onClick=${()=>say(`Demo: this would open the ${ds.name} cancel guide`)}>Open cancel guide</button>
+          <button class="chip" style=${{padding:'10px',borderRadius:10}} onClick=${()=>{upd(ds.id,{status:'dismissed'});setOpen(null);say(`${ds.name} removed. This isn’t a subscription.`)}}>This isn’t a subscription</button>
+        </div>
+      </aside>
+    </div>`}
+    ${toast&&html`<div role="status" class="fixed left-1/2 -translate-x-1/2 bottom-6 z-50 px-4 py-2 rounded-full text-sm font-semibold" style=${{background:'var(--ink)',color:'var(--bg)',marginBottom:'env(safe-area-inset-bottom,0px)'}}>${toast}</div>`}
+  </div>`;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
+</script>
+</body>
+</html>
